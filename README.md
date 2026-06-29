@@ -83,7 +83,69 @@ e pergunta antes de avançar.
 https://www.net-empregos.com/15601784/ai-engineer/
 
 
+## Java 
 
+Java" é um cliente Java que consome essa API e devolve a recomendação de reposição. Nada de framework.
+
+1. O que o lado Python expõe (já faz parte do projeto):
+
+
+POST /forecast   body: {"sku": "FOODS_3_090", "loja": "CA_1"}
+resposta:        {"sku": "FOODS_3_090", "previsao_14d": 47, "stock_atual": 35, "repor": 12}
+2. O cliente Java mínimo (~60 linhas, Java 17, sem Spring):
+
+
+// LogiForecastClient.java — cliente Java que consome a API do modelo de IA.
+// Demonstra integração de IA num sistema externo (típico: WMS/ERP em Java).
+import java.net.URI;
+import java.net.http.HttpClient;          // HTTP client nativo do Java 11+
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import com.fasterxml.jackson.databind.JsonNode;     // Jackson = única dependência (parse JSON)
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class LogiForecastClient {
+    // URL da API do modelo (local ou Cloud Run), configurável por env var
+    static final String API = System.getenv().getOrDefault("FORECAST_API", "http://localhost:8000");
+
+    public static void main(String[] args) throws Exception {
+        String sku  = args.length > 0 ? args[0] : "FOODS_3_090";   // SKU a consultar
+        String loja = args.length > 1 ? args[1] : "CA_1";          // loja/armazém
+
+        // 1) Construir o pedido JSON
+        String body = String.format("{\"sku\":\"%s\",\"loja\":\"%s\"}", sku, loja);
+
+        // 2) Enviar POST à API do modelo de IA
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(API + "/forecast"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+
+        // 3) Ler a resposta da IA e aplicar a regra de negócio
+        JsonNode r = new ObjectMapper().readTree(resp.body());
+        int repor = r.get("repor").asInt();                        // quantidade recomendada pela IA
+
+        // 4) "Integração": agir sobre a recomendação (aqui só imprime; num WMS criaria a ordem)
+        System.out.printf("SKU %s @ %s → previsao 14d=%d, stock=%d → REPOR %d unidades%n",
+                sku, loja, r.get("previsao_14d").asInt(), r.get("stock_atual").asInt(), repor);
+        if (repor > 0) System.out.println("→ [WMS] ordem de reposição criada para " + repor + " unidades.");
+        else           System.out.println("→ [WMS] sem reposição necessária.");
+    }
+}
+3. Como corre:
+
+
+java LogiForecastClient FOODS_3_090 CA_1
+# SKU FOODS_3_090 @ CA_1 → previsao 14d=47, stock=35 → REPOR 12 unidades
+# → [WMS] ordem de reposição criada para 12 unidades.
+4. O que isto PROVA (e porque chega):
+
+Sabes escrever Java e consumir uma API de IA a partir de Java → exatamente "integrar IA em sistemas existentes".
+O comentário [WMS] mostra que percebes o contexto logístico (o sistema real seria um WMS/ERP Java a criar a ordem).
+No README dizes: "o modelo é servido em Python; incluí um cliente Java que demonstra a integração num consumidor empresarial (padrão WMS/ERP)". Honesto e suficiente.
 
 
 
